@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_HOST_IP = "your-docker-ec2-ip"
+        DOCKER_USER = "ubuntu"
+        DOCKER_APP_DIR = "salon-app"
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git 'https://github.com/shrutikhannukar/salon-app.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    echo "Copying files to Docker Host..."
+                    scp -o StrictHostKeyChecking=no -r . ${DOCKER_USER}@${DOCKER_HOST_IP}:~/${DOCKER_APP_DIR}
+
+                    echo "Building Docker image on Docker Host..."
+                    ssh -o StrictHostKeyChecking=no ${DOCKER_USER}@${DOCKER_HOST_IP} '
+                        cd ~/${DOCKER_APP_DIR} &&
+                        docker build -t salon-app-image .
+                    '
+                """
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+                sh """
+                    echo "Stopping and removing any existing container..."
+                    ssh -o StrictHostKeyChecking=no ${DOCKER_USER}@${DOCKER_HOST_IP} '
+                        docker rm -f salon-app-container || true
+                    '
+
+                    echo "Starting new container..."
+                    ssh -o StrictHostKeyChecking=no ${DOCKER_USER}@${DOCKER_HOST_IP} '
+                        docker run -d -p 3000:3000 --name salon-app-container salon-app-image
+                    '
+                """
+            }
+        }
+
+        stage('Selenium Tests') {
+            steps {
+                sh """
+                    echo "Running Selenium tests..."
+                    # Add your Selenium test commands here
+                    # For example: pytest tests/selenium/ --headless
+                """
+            }
+        }
+    }
+}
