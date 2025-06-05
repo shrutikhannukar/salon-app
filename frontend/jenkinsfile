@@ -1,1 +1,55 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_HOST_IP = "15.207.85.127"
+        DOCKER_USER = "ubuntu"
+        DOCKER_APP_DIR = "salon-app"
+        IMAGE_NAME = "vite-salon-app"
+        CONTAINER_NAME = "vite-salon-container"
+        FRONTEND_PORT = "5173"
+    }
 
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git 'https://github.com/shrutikhannukar/salon-app'
+            }
+        }
+
+        stage('Copy Files to EC2') {
+            steps {
+                sh """
+                    scp -o StrictHostKeyChecking=no -r . ${DOCKER_USER}@${DOCKER_HOST_IP}:${DOCKER_APP_DIR}
+                """
+            }
+        }
+
+        stage('Build Docker Image on EC2') {
+            steps {
+                sh """
+                    ssh -o StrictHostKeyChecking=no ${DOCKER_USER}@${DOCKER_HOST_IP} '
+                        cd ${DOCKER_APP_DIR}/frontend &&
+                        docker build -t ${IMAGE_NAME} .
+                    '
+                """
+            }
+        }
+
+        stage('Run Docker Container on EC2') {
+            steps {
+                sh """
+                    ssh -o StrictHostKeyChecking=no ${DOCKER_USER}@${DOCKER_HOST_IP} '
+                        docker rm -f ${CONTAINER_NAME} || true &&
+                        docker run -d -p ${FRONTEND_PORT}:${FRONTEND_PORT} --name ${CONTAINER_NAME} ${IMAGE_NAME}
+                    '
+                """
+            }
+        }
+
+        stage('Selenium Tests (Optional)') {
+            steps {
+                echo "Running Selenium tests... (you can add your test commands here)"
+            }
+        }
+    }
+}
